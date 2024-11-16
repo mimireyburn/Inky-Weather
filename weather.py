@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from random import choice
 import csv
 import os
+from PIL import Image, ImageDraw, ImageFont
 
 import dotenv
 
@@ -109,7 +110,50 @@ class LLM:
 
 class Weather:
     def __init__(self):
-        pass
+        self.weather_mapping = {
+            "NA": "not_available.png",
+            "0": "clear_night.png",
+            "1": "sunny_day.png",
+            # partly cloudy
+            "2": "partly_cloudy_night.png",
+            "3": "partly_cloudy.png",
+
+            "4": "not_used.png",
+            # cloud
+            "5": "mist.png",
+            "6": "fog.png",
+            "7": "cloudy.png", 
+            "8": "overcast.png",
+            # light rain
+            "9": "light_rain_shower_night.png",
+            "10": "light_rain_shower.png",
+            "11": "drizzle.png",
+            "12": "light_rain.png",
+            # heavy rain
+            "13": "heavy_rain_shower_night.png",
+            "14": "heavy_rain_shower.png",
+            "15": "heavy_rain.png",
+            # sleet
+            "16": "sleet_shower_night.png",
+            "17": "sleet_shower.png",
+            "18": "sleet.png",
+            # hail
+            "19": "hail_shower_night.png",
+            "20": "hail_shower.png",
+            "21": "hail.png",
+
+            # light snow
+            "22": "light_snow_shower_night.png",
+            "23": "light_snow_shower.png",
+            "24": "light_snow.png",
+            "25": "heavy_snow_shower_night.png",
+            "26": "heavy_snow_shower.png",
+            "27": "heavy_snow.png",
+            # thunderstorm
+            "28": "thunder_shower_night.png",
+            "29": "thunder_shower.png",
+            "30": "thunder.png"
+        }
 
     def update(self, source_url):
 
@@ -244,3 +288,160 @@ class Weather:
             styles = list(csv.reader(f))
         style = choice(styles)
         return style
+    
+    def get_weather_image(self, weather_code):
+        return self.weather_mapping.get(weather_code, "default.png") 
+    
+    def weather_to_images(weather):
+
+        timenow = datetime.now()
+        forecast = weather.update(FORECAST_5DAYS)
+        forecast = {key: value for key, value in forecast.items() if key >
+                    timenow - timedelta(hours=3)}
+        forecast = {key: value for key, value in forecast.items() if key <
+                    timenow.replace(hour=23, minute=59, second=59)}
+        # map weather codes to images
+        images = [weather.get_weather_image(value["W"]) for value in forecast.values()]
+        return images
+    
+    def make_bg_white(self, image):
+        bg = Image.new('RGB', image.size, 'white')
+        bg.paste(image, (0, 0), image)
+        return bg
+    
+    def create_image_grid(self, images):
+        # Get current working directory for image path
+        current_path = os.getcwd()
+        image_path = current_path + "/files/weather_icons/"
+
+        # Load and resize images
+        loaded_images = []
+        for img_name in images[:5]:  # Take first 5 images
+            try:
+                img = Image.open(image_path + img_name)
+                loaded_images.append(img)
+            except Exception as e:
+                img = Image.open(image_path + "not_available.png")
+                loaded_images.append(img)
+                print(f"Could not load image: {img_name} because {e}")
+                continue
+
+        # Calculate dimensions
+        if loaded_images:
+            single_width = loaded_images[0].width
+            single_height = loaded_images[0].height
+            total_width = single_width * len(loaded_images)
+            
+            # Create new image with white background
+            grid = Image.new('RGB', (total_width, single_height), 'white')
+            
+            # Paste images horizontally
+            for i, img in enumerate(loaded_images):
+                grid.paste(img, (i * single_width, 0))
+            
+            # Save the grid image
+            grid.save(current_path + "/files/weather_grid.png")
+            
+            return grid
+        return None
+    
+
+    def make_cold(self, image):
+        # Get current working directory for image path
+        current_path = os.getcwd()
+        # Load the cold overlay image
+        cold_overlay = Image.open(current_path + "/files/weather_icons/cold.png").convert("RGBA")
+        modified = image.convert("RGBA")
+        modified = Image.alpha_composite(modified, cold_overlay)
+        
+        return modified.convert("RGB")  # Convert back to RGB if needed
+    
+    def add_grass(self, image):
+        # Ensure both images are in RGBA mode
+
+        current_path = os.getcwd()
+        image = image.convert("RGBA")
+        grass = Image.open(current_path + "/files/weather_icons/grass.png").convert("RGBA")
+        modified = Image.alpha_composite(image, grass)
+        return modified 
+    
+    def add_new(self, image):
+        current_path = os.getcwd()
+        image = image.convert("RGBA")
+        new = Image.open(current_path + "/files/weather_icons/new.png").convert("RGBA")
+        modified = Image.alpha_composite(image, new)
+        return modified 
+
+    def test_make_cold(self):
+        current_path = os.getcwd()
+        image = Image.open(current_path + "/files/weather_icons/cloudy.png")
+        image = self.make_bg_white(image)
+        modified = self.make_cold(image)
+        modified.save(current_path + "/files/weather_icons/modified_cold.png")
+
+    def test_add_grass(self):
+        current_path = os.getcwd()
+        image = Image.open(current_path + "/files/weather_icons/cloudy.png")
+        image = self.make_bg_white(image)
+        modified = self.add_grass(image)
+        modified.save(current_path + "/files/weather_icons/modified_grass.png")
+
+    def test_add_new(self):
+        current_path = os.getcwd()
+        image = Image.open(current_path + "/files/weather_icons/cloudy.png")
+        image = self.make_bg_white(image)
+        modified = self.add_new(image)
+        modified.save(current_path + "/files/weather_icons/modified_new.png")
+    
+    def new_full_run_through(self, weather):
+        timenow = datetime.now()
+        forecast = weather.update(FORECAST_5DAYS)
+        forecast = {key: value for key, value in forecast.items() if key >
+                    timenow - timedelta(hours=3)}
+        forecast = {key: value for key, value in forecast.items() if key <
+                    timenow.replace(hour=23, minute=59, second=59)}
+        image_path = os.getcwd() + "/files/weather_icons/"
+        # I need 5 images for the grid
+        # I need to apply the cold overlay if the temperature < 10
+
+        # load each image and apply cold overlay if temperature < 10
+        loaded_images = []
+        for timestamp, value in forecast.items():  # Use timestamp as key
+            print(value)
+            img_name = weather.get_weather_image(value["W"])
+            try:
+                img = Image.open(image_path + img_name)
+            except:
+                img = Image.open(image_path + "not_available.png")
+            img = self.make_bg_white(img)
+            if float(value["T"]) < 10:
+                img = self.make_cold(img)
+
+            # Draw the timestamp on the image
+            draw = ImageDraw.Draw(img)
+            font = ImageFont.truetype("files/AtkinsonHyperlegible-Regular.ttf", size=40)
+            time_str = timestamp.strftime("%-I%p").lower().lstrip('0')  # Formats like "9am" or "8pm"
+            draw.text((img.width - 140, img.height - 60), time_str, fill="black", font=font)  # Bottom right, larger text
+            
+            loaded_images.append(img)
+
+        # create image grid
+        if loaded_images:
+            single_width = loaded_images[0].width
+            single_height = loaded_images[0].height
+            total_width = single_width * len(loaded_images)
+            
+            # Create new image with white background
+            grid = Image.new('RGB', (total_width, single_height), 'white')
+            
+            # Paste images horizontally
+            for i, img in enumerate(loaded_images):
+                grid.paste(img, (i * single_width, 0))
+            
+            # Save the grid image
+            grid.save(image_path + "weather_grid.png")
+            
+            return grid
+        return None
+
+
